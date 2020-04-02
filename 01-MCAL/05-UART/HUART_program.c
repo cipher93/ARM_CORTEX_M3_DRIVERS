@@ -41,16 +41,19 @@ u8 HUART_u8Init(u32 Copy_u32PeripheralNumber, u32 Copy_u32Baudrate, u32 Copy_u32
 	if (Copy_u32PeripheralNumber == UART_USART1)
 	{
 
-		/*Enable Clock on UART Peripheral and on Port from RCC Driver*/
-		RCC_voidEnablePeripheralClock(RCC_PERIPHERALS_PORTA);
-		RCC_voidEnablePeripheralClock(RCC_PERIPHERALS_USART1);
 
 		/*Enable Interrupt of UART peripheral from NVIC Driver*/
 		NVIC_u8EnableInterrupt(37);
 
+		/*Enable Clock on UART Peripheral and on Port from RCC Driver*/
+		RCC_voidEnablePeripheralClock(RCC_PERIPHERALS_PORTA);
+		RCC_voidEnablePeripheralClock(RCC_PERIPHERALS_USART1);
+
+
+
 		/*Create object for TX and RX pins and initialize them from GPIO Driver*/
-		GPIO_t TX = {GPIO_PORT_A, GPIO_PIN9, GPIO_MODE_INPUT_PULL, GPIO_SPEED_OUTPUT_10};
-		GPIO_t RX = {GPIO_PORT_A, GPIO_PIN10, GPIO_MODE_OUTPUT_AF_PUSHPULL, GPIO_SPEED_OUTPUT_10};
+		GPIO_t TX = {GPIO_PORT_A, GPIO_PIN9, GPIO_MODE_OUTPUT_AF_PUSHPULL, GPIO_SPEED_OUTPUT_2};
+		GPIO_t RX = {GPIO_PORT_A, GPIO_PIN10,GPIO_MODE_INPUT_PULL , GPIO_SPEED_OUTPUT_2};
 
 		GPIO_voidConfigurePin(&RX);
 		GPIO_voidConfigurePin(&TX);

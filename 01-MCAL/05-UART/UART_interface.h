@@ -64,6 +64,7 @@
 
 #define UART_INTERRUPT_ENABLE_MASK					(u8)1
 #define UART_INTERRUPT_DISABLE_MASK					(u8)0
+#define UART_PARITY_CANCELLATION_MASK				(u8)~(0b10000000)
 
 /*Custom Types*/
 typedef void(*TXCallback_t)(void);

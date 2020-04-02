@@ -50,6 +50,10 @@ u8 UART_u8Configure (u32 Copy_u32BaseAddress, u32 Copy_u32Baudrate, u32 Copy_u32
 
 	/*This Local Variable will hold the status to be returned in the end*/
 	u8 Local_u8Status = STATUS_NOK;
+
+	/*Enable UART Peripheral*/
+	*((u32*)(Copy_u32BaseAddress+UART_CR1)) |= UART_ENABLE_MASK;
+
 	/*Write Baudrate inside the BRR register*/
 	*((u32*)(Copy_u32BaseAddress+UART_BRR)) = Copy_u32Baudrate;
 
@@ -80,6 +84,10 @@ u8 UART_u8Configure (u32 Copy_u32BaseAddress, u32 Copy_u32Baudrate, u32 Copy_u32
 		/*Return status as ok since we reached this step successfully*/
 		Local_u8Status = STATUS_OK;
 	}
+	/*Enable Transmitter to send Idle frame*/
+	*((u32*)(Copy_u32BaseAddress+UART_CR1)) |= UART_TX_ENABLE_MASK;
+	/*Enable Receiver*/
+	*((u32*)(Copy_u32BaseAddress+UART_CR1)) |= UART_RX_ENABLE_MASK;
 	/*Save Base Address to be used later in functions*/
 	UART_BaseAddress = Copy_u32BaseAddress;
 
@@ -92,13 +100,14 @@ u8 UART_u8Configure (u32 Copy_u32BaseAddress, u32 Copy_u32Baudrate, u32 Copy_u32
 void UART_voidSend(u8 *Copy_u8Buffer, u8 Copy_u8Size)
 {
 
-	/*Enable Transmitter*/
-	*((u32*)(UART_BaseAddress+UART_CR1)) |= UART_TX_ENABLE_MASK;
+
 	/*Save the passed parameters in the txBuffer object*/
 	txBuffer.dataArray = Copy_u8Buffer;
-	txBuffer.size = Copy_u8Size-1;
+	txBuffer.size = Copy_u8Size;
 	/*Send the first char of the data array and increment the current position. And the rest will be handled by the interrupt*/
 	*((u32*)(UART_BaseAddress+UART_DR)) = txBuffer.dataArray[0];
+			//txBuffer.dataArray[0];
+
 	txBuffer.currentPosition++;
 }
 /*Description: This function will be used to trigger receiving data. It will receive only the first bit of the buffer and the rest will be handled by the interrupt request
@@ -111,16 +120,23 @@ u8 UART_u8Receive(u8 *Copy_u8Buffer, u8 Copy_u8Size)
 	/*If current status is IDLE, then it means we are ready to receive new data*/
 	if (rxBuffer.bufferState == STATUS_IDLE)
 	{
-		/*Enable Receiver*/
-		*((u32*)(UART_BaseAddress+UART_CR1)) |= UART_RX_ENABLE_MASK;
 
 		/*Save the passed parameters in the txBuffer object*/
 		rxBuffer.dataArray = Copy_u8Buffer;
-		rxBuffer.size = Copy_u8Size-1;
+		rxBuffer.size = Copy_u8Size;
 
 		/*Start receiving data and increment current position variable*/
-		rxBuffer.dataArray[0] = *((u32*)(UART_BaseAddress+UART_DR));
+		if (((*((u32*)(UART_BaseAddress+UART_SR)))&UART_PARITY_EVEN_MASK) || ((*((u32*)(UART_BaseAddress+UART_SR)))&UART_PARITY_EVEN_MASK))
+		{
+			rxBuffer.dataArray[0] = (*((u32*)(UART_BaseAddress+UART_DR)) & UART_PARITY_CANCELLATION_MASK);
+			trace_printf("%d", rxBuffer.dataArray[0]);
+		}
+		else
+		{
+			rxBuffer.dataArray[0] = (*((u32*)(UART_BaseAddress+UART_DR)));
+		}
 		rxBuffer.currentPosition++;
+
 
 		/*Change flag status to busy so that any new receive request is halted till the end*/
 		rxBuffer.bufferState = STATUS_BUSY;
@@ -175,17 +191,18 @@ u8 UART_u8SetRXCallBack(RXCallback_t Copy_RXCallbackFunction)
 void USART1_IRQHandler(void)
 {
 	/*Check which flag fired the interrupt request*/
-	u32 Local_u32TXFlag = *((u32*)(UART_BaseAddress+UART_SR)) & UART_TX_COMPLETE_MASK;
-	u32 Local_u32RXFlag = *((u32*)(UART_BaseAddress+UART_SR)) & UART_RX_NOT_EMPTY_MASK;
+	u32 volatile Local_u32RXFlag = 1;
+	u32 volatile Local_u32TXFlag = *((u32*)(UART_BaseAddress+UART_SR)) & UART_TX_COMPLETE_MASK;
+
 
 	/*If value of local variable representing TXE is not zero, then it means it is the one that got fired*/
 	if (Local_u32TXFlag)
 	{
 		/*Check if we have reached the last character, if we haven't reached it yet, send the next char*/
-		if (txBuffer.currentPosition == (txBuffer.size))
+		if (txBuffer.currentPosition != (txBuffer.size))
 		{
 			/*Send the current char of the data array and increment the current position*/
-			*((u32*)(UART_BaseAddress+UART_DR)) |= txBuffer.dataArray[0];
+			*((u32*)(UART_BaseAddress+UART_DR)) |= txBuffer.dataArray[txBuffer.currentPosition];
 			txBuffer.currentPosition++;
 		}
 		/*If we reached the last character, then reset all the variables*/
@@ -194,12 +211,15 @@ void USART1_IRQHandler(void)
 			txBuffer.currentPosition = 0;
 			txBuffer.size = 0;
 			txBuffer.dataArray = NULL;
+
+			/*Clear TC Flag*/
+			*((u32*)(UART_BaseAddress+UART_SR)) &= ~(UART_TX_COMPLETE_MASK);
 			/*Callback function*/
 			TXCallbackFunction();
 		}
 	}
 	/*If value of local variable representing RXNE is not zero, then it means it is the one that got fired*/
-	else if (Local_u32RXFlag)
+	if (Local_u32RXFlag)
 	{
 		/*Clear RXNE FLag*/
 		*((u32*)(UART_BaseAddress+UART_SR)) &= ~UART_RX_NOT_EMPTY_MASK;
@@ -208,7 +228,8 @@ void USART1_IRQHandler(void)
 		if (rxBuffer.bufferState == STATUS_BUSY)
 		{
 			/*Save current data in next position in array and increment current position*/
-			rxBuffer.dataArray[rxBuffer.currentPosition] = *((u32*)(UART_BaseAddress+UART_DR));
+			rxBuffer.dataArray[rxBuffer.currentPosition] = (*((u32*)(UART_BaseAddress+UART_DR)))& UART_PARITY_CANCELLATION_MASK;
+			trace_printf("%d",rxBuffer.dataArray[rxBuffer.currentPosition]);
 			rxBuffer.currentPosition++;
 
 			/*Check that we haven't reached the end of the array*/

@@ -34,9 +34,9 @@
   Fraction= 0.5 *16=8 -->8
 */
 
-#define UART_BAUDRATE_4800				(u32)(0x3A98)
-#define UART_BAUDRATE_9600				(u32)(0x1D4C)
-#define UART_BAUDRATE_115200			(u32)(0x0271)
+#define UART_BAUDRATE_4800				(u16)(0x3A98)
+#define UART_BAUDRATE_9600				(u16)(0x1D4C)
+#define UART_BAUDRATE_115200			(u16)(0x0271)
 
 /*Stop Bits*/
 #define UART_STOP_BIT1					UART_STOP_BIT1_MASK
