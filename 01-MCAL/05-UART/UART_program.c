@@ -105,6 +105,8 @@ void UART_voidSend(u8 *Copy_u8Buffer, u8 Copy_u8Size)
 	txBuffer.dataArray = Copy_u8Buffer;
 	txBuffer.size = Copy_u8Size;
 	/*Send the first char of the data array and increment the current position. And the rest will be handled by the interrupt*/
+	/*Clear Current value in register*/
+	*((u32*)(UART_BaseAddress+UART_DR)) = 0x0;
 	*((u32*)(UART_BaseAddress+UART_DR)) = txBuffer.dataArray[0];
 			//txBuffer.dataArray[0];
 
@@ -120,7 +122,6 @@ u8 UART_u8Receive(u8 *Copy_u8Buffer, u8 Copy_u8Size)
 	/*If current status is IDLE, then it means we are ready to receive new data*/
 	if (rxBuffer.bufferState == STATUS_IDLE)
 	{
-
 		/*Save the passed parameters in the txBuffer object*/
 		rxBuffer.dataArray = Copy_u8Buffer;
 		rxBuffer.size = Copy_u8Size;
@@ -134,6 +135,7 @@ u8 UART_u8Receive(u8 *Copy_u8Buffer, u8 Copy_u8Size)
 		else
 		{
 			rxBuffer.dataArray[0] = (*((u32*)(UART_BaseAddress+UART_DR)));
+			trace_printf("%d", rxBuffer.dataArray[0]);
 		}
 		rxBuffer.currentPosition++;
 
@@ -191,16 +193,42 @@ u8 UART_u8SetRXCallBack(RXCallback_t Copy_RXCallbackFunction)
 void USART1_IRQHandler(void)
 {
 	/*Check which flag fired the interrupt request*/
-	u32 volatile Local_u32RXFlag = 1;
+	u32 volatile Local_u32RXFlag = *((u32*)(UART_BaseAddress+UART_DR)) & 0xFFFFFFFF;
 	u32 volatile Local_u32TXFlag = *((u32*)(UART_BaseAddress+UART_SR)) & UART_TX_COMPLETE_MASK;
 
 
+	/*If value of local variable representing RXNE is not zero, then it means it is the one that got fired*/
+		if (Local_u32RXFlag)
+		{
+			/*Check that if status is busy, if so, then it means we are continuing off of an ongoing receiving operation and we should continue*/
+			if (rxBuffer.bufferState == STATUS_BUSY)
+			{
+				/*Save current data in next position in array and increment current position*/
+				rxBuffer.dataArray[rxBuffer.currentPosition] = (*((u32*)(UART_BaseAddress+UART_DR)))& UART_PARITY_CANCELLATION_MASK;
+				trace_printf("%d",rxBuffer.dataArray[rxBuffer.currentPosition]);
+				rxBuffer.currentPosition++;
+
+				/*Check that we haven't reached the end of the array*/
+				if (rxBuffer.currentPosition==rxBuffer.size)
+				{
+					/*If we reached the last position, then reset all of the variables and mark status as IDLE*/
+					rxBuffer.dataArray = NULL;
+					rxBuffer.currentPosition = 0;
+					rxBuffer.size=0;
+					rxBuffer.bufferState = STATUS_IDLE;
+					/*Callback function*/
+					RXCallbackFunction();
+				}
+			}
+		}
 	/*If value of local variable representing TXE is not zero, then it means it is the one that got fired*/
 	if (Local_u32TXFlag)
 	{
 		/*Check if we have reached the last character, if we haven't reached it yet, send the next char*/
 		if (txBuffer.currentPosition != (txBuffer.size))
 		{
+			/*Clear Current value in register*/
+			*((u32*)(UART_BaseAddress+UART_DR)) = 0x0;
 			/*Send the current char of the data array and increment the current position*/
 			*((u32*)(UART_BaseAddress+UART_DR)) |= txBuffer.dataArray[txBuffer.currentPosition];
 			txBuffer.currentPosition++;
@@ -212,39 +240,13 @@ void USART1_IRQHandler(void)
 			txBuffer.size = 0;
 			txBuffer.dataArray = NULL;
 
-			/*Clear TC Flag*/
-			*((u32*)(UART_BaseAddress+UART_SR)) &= ~(UART_TX_COMPLETE_MASK);
+			/*Reset Flags*/
+			*((u32*)(UART_BaseAddress+UART_SR)) &= ~ UART_TX_COMPLETE_MASK;
 			/*Callback function*/
 			TXCallbackFunction();
 		}
 	}
-	/*If value of local variable representing RXNE is not zero, then it means it is the one that got fired*/
-	if (Local_u32RXFlag)
-	{
-		/*Clear RXNE FLag*/
-		*((u32*)(UART_BaseAddress+UART_SR)) &= ~UART_RX_NOT_EMPTY_MASK;
 
-		/*Check that if status is busy, if so, then it means we are continuing off of an ongoing receiving operation and we should continue*/
-		if (rxBuffer.bufferState == STATUS_BUSY)
-		{
-			/*Save current data in next position in array and increment current position*/
-			rxBuffer.dataArray[rxBuffer.currentPosition] = (*((u32*)(UART_BaseAddress+UART_DR)))& UART_PARITY_CANCELLATION_MASK;
-			trace_printf("%d",rxBuffer.dataArray[rxBuffer.currentPosition]);
-			rxBuffer.currentPosition++;
-
-			/*Check that we haven't reached the end of the array*/
-			if (rxBuffer.currentPosition==rxBuffer.size)
-			{
-				/*If we reached the last position, then reset all of the variables and mark status as IDLE*/
-				rxBuffer.dataArray = NULL;
-				rxBuffer.currentPosition = 0;
-				rxBuffer.size=0;
-				rxBuffer.bufferState = STATUS_IDLE;
-				/*Callback function*/
-				RXCallbackFunction();
-			}
-		}
-	}
 }
 
 
