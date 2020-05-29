@@ -1,6 +1,7 @@
 #ifndef STD_TYPES_H_
 #define STD_TYPES_H_
 
+
 #define u8  unsigned char
 #define u16 unsigned short int
 #define u32 unsigned long int
@@ -17,5 +18,9 @@
 #define STATUS_NOK		(u8)1
 
 #define NULL	((void *)0)
+
+/*Callback functions pointers*/
+typedef void(*TXCallback_t)(void);
+typedef void(*RXCallback_t)(void);
 
 #endif
